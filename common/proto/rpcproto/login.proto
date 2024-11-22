@@ -24,16 +24,18 @@ enum LoginType {
 
 message LoginInfo {
     int32 PlatType   = 1;
-    string Account  = 2;
-    string Password  = 3;
-    string Ticket    = 4;
+    int32 LastServer = 2;
+    string UserName  = 3;
+    string Password  = 4;
+    string Ticket    = 5;
 }
 
 //数据库返回结果
 message LoginResult {
     int32 Ret = 1;
-    uint64 UserID = 2;
-    string SteamID = 3;
+    int32 LastArea = 2;
+    string UserId = 3;
+    string SteamId = 4;
 }
 
 //选服请求

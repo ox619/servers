@@ -1,17 +1,54 @@
 {
   "Service":{
-    "HttpGateService": {
-      "HttpListen":":9000",
-      "ForbidGustLogin":false
-    }
+    "HttpService":{
+			"ListenAddr":"0.0.0.0:9402",
+			"ReadTimeout":10000,
+			"WriteTimeout":10000,
+			"ProcessTimeout":10000,
+			"CAFile":[
+			{
+				"Certfile":"",
+				"Keyfile":""
+			}
+			]
+			
+		},
+    "AuthService": {
+        "GoRoutineNum": 10
+    },
+    "LoginService": [{
+			"AreaId": 20,
+			"AreaName": "黎非易服",
+			"GateList": [{
+				"NodeId": "gate1",
+				"Addr": "192.168.0.59:9501"
+			}]
+		},
+		{
+			"AreaId": 10,
+			"AreaName": "北美服",
+			"GateList": [{
+				"NodeId":"gate2",
+				"Addr": "192.168.0.59:9502"
+			}]
+		}
+		]
   },
   "NodeService":[
     {
       "NodeId": "loginserver",
-      "HttpGateService": {
-        "HttpListen":":9000",
-        "ForbidGustLogin":false
-      }
+      "HttpService":{
+				"ListenAddr":"0.0.0.0:9010",
+		   		"ReadTimeout":10000,
+		   		"WriteTimeout":10000,
+		   		"ProcessTimeout":10000,
+		   		"CAFile":[
+					{
+					   "Certfile":"",
+					   "Keyfile":""
+					}
+		   		]
+	   		}
     }
   ]
  

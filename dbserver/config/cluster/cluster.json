@@ -1,7 +1,7 @@
 {
   "NodeList": [
     {
-      "NodeId": "LoginGate1",
+      "NodeId": "loginserver",
       "Private": false,
       "ListenAddr": "0.0.0.0:11001",
       "MaxRpcParamLen": 819200,

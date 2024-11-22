@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "loginserver/authservice"
 	_ "loginserver/loginservice"
 	"time"
 

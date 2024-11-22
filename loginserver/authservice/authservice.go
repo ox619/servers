@@ -91,8 +91,8 @@ func (auth *AuthService) CheckAccount(loginInfo *rpc.LoginInfo, loginResult *rpc
 	req.CollectName = collect.AccountCollectName
 	req.Type = db.OptType_Find
 	req.MaxRow = 1
-	req.Condition, _ = bson.Marshal(bson.D{{"Account", loginInfo.Account}})
-	req.Key = loginInfo.Account
+	req.Condition, _ = bson.Marshal(bson.D{{"Account", loginInfo.UserName}})
+	req.Key = loginInfo.UserName
 	ret := db.DBControllerRet{}
 	err := auth.GetService().GetRpcHandler().Call("DBService.RPC_DBRequest", &req, &ret)
 	if err != nil {
@@ -106,10 +106,10 @@ func (auth *AuthService) CheckAccount(loginInfo *rpc.LoginInfo, loginResult *rpc
 		bson.Unmarshal(ret.Res[0], &account)
 		if account.Password != "" && account.Password != loginInfo.Password {
 			loginResult.Ret = int32(msg.ErrCode_InterNalError)
-			log.Warning("check account failed, account %s password %d mismatch", loginInfo.Account, loginInfo.Password)
+			log.Warning("check account failed, account %s password %d mismatch", loginInfo.UserName, loginInfo.Password)
 			return nil
 		}
-		loginResult.UserID = account.UserID
+		loginResult.UserId = account.UserId
 	}
 	return nil
 }
@@ -147,14 +147,14 @@ func (auth *AuthService) CheckSteam(loginInfo *rpc.LoginInfo, loginResult *rpc.L
 		return fmt.Errorf("steam check failed")
 	}
 
-	loginResult.SteamID = resp.Response.Params.SteamID
+	loginResult.SteamId = resp.Response.Params.SteamID
 
 	var req db.DBControllerReq
 	req.CollectName = collect.AccountCollectName
 	req.Type = db.OptType_Find
 	req.MaxRow = 1
-	req.Condition, _ = bson.Marshal(bson.D{{"Account", loginResult.SteamID}})
-	req.Key = loginResult.SteamID
+	req.Condition, _ = bson.Marshal(bson.D{{"Account", loginResult.SteamId}})
+	req.Key = loginResult.SteamId
 	ret := db.DBControllerRet{}
 	err = auth.GetService().GetRpcHandler().Call("DBService.RPC_DBRequest", &req, &ret)
 	if err != nil {
@@ -166,7 +166,7 @@ func (auth *AuthService) CheckSteam(loginInfo *rpc.LoginInfo, loginResult *rpc.L
 	if len(ret.Res) != 0 {
 		account := collect.CAccount{}
 		bson.Unmarshal(ret.Res[0], &account)
-		loginResult.UserID = account.UserID
+		loginResult.UserId = account.UserId
 	}
 	return nil
 }

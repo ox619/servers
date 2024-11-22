@@ -7,16 +7,14 @@ import (
 	"common/proto/rpc"
 	"common/util"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
-	"time"
 
 	"github.com/duanhf2012/origin/v2/log"
 	"github.com/duanhf2012/origin/v2/service"
 	"github.com/duanhf2012/origin/v2/sysservice/httpservice"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type GateInfoResp struct {
@@ -38,9 +36,9 @@ func (login *LoginModule) OnRelease() {
 }
 
 type HttpRespone struct {
-	ECode     int
-	UserId    uint64
+	ECode     int32
 	HisAreaId int32
+	UserId    string
 	Token     string
 	AreaGate  string
 }
@@ -73,21 +71,23 @@ func (login *LoginModule) loginToDB(session *httpservice.HttpSession, loginInfo 
 	var req db.DBControllerReq
 	var err error
 	var token string
-	now := time.Now().Unix()
-	if result.UserID > 0 {
-		token, _ = util.EncryptToken(strconv.FormatUint(result.UserID, 10))
-		err = db.MakeUpdateId(collect.AccountCollectName, bson.D{{"$set", bson.D{{"LoginIP", session.GetHeader("X-Real-IP")}, {"Token", token}}}},
-			result.UserID, token, &req)
+	if len(result.UserId) > 0 {
+		token, _ = util.EncryptToken(result.UserId)
+		err = db.MakeUpdateId(collect.AccountCollectName, bson.D{{"$set", bson.D{{"LoginIp", session.GetHeader("X-Real-IP")}, {"Token", token}}}},
+			result.UserId, token, &req)
 	} else {
-		req.CollectName = "AccountSum"
-		req.Type = db.OptType_Upset
-		req.Condition, _ = bson.Marshal(bson.D{{Key: "Region", Value: 0}, {"Platform", 0}, {"ServerId", 0}})
-		req.Key = session.GetHeader("X-Real-IP")
-		data, _ := bson.Marshal(bson.M{"$inc": bson.M{"UserNum": 1}})
-		req.RawData = append(req.Data, data)
-		if err != nil {
-
+		account := collect.CAccount{
+			UserId:     primitive.NewObjectID().Hex(),
+			RegisterIp: session.GetHeader("X-Real-IP"),
+			LoginIp:    session.GetHeader("X-Real-IP"),
 		}
+		account.UserName = loginInfo.UserName
+		account.Password = loginInfo.Password
+
+		account.Token, _ = util.EncryptToken(result.UserId)
+		token = account.Token
+		result.UserId = account.UserId
+		err = db.MakeInsertId(collect.AccountCollectName, &account, account.UserId, &req)
 	}
 
 	if err != nil {
@@ -104,32 +104,12 @@ func (login *LoginModule) loginToDB(session *httpservice.HttpSession, loginInfo 
 		}
 
 		resp := HttpRespone{
-			UserId:    result.UserID,
+			UserId:    result.UserId,
 			AreaGate:  login.funcGetAllAreaGateUrl(),
 			HisAreaId: result.LastArea,
 			Token:     token,
 		}
 		session.WriteJsonDone(http.StatusOK, &resp)
-
-		if result.Register > 0 {
-			interval := util.GetIntervalDay(result.LoginAt, now)
-			if interval > 0 {
-				collect.UpdateStats(uint8(loginInfo.Channel), collect.Stats_Field_DAU, nil, login.GetService().GetName())
-				interval = util.GetIntervalDay(result.Register, now)
-				if interval > 0 && interval <= 7 {
-					if interval <= 1 {
-						collect.UpdateStats(uint8(loginInfo.Channel), collect.Stats_Field_DR1, nil, login.GetService().GetName())
-					} else if interval <= 3 {
-						collect.UpdateStats(uint8(loginInfo.Channel), collect.Stats_Field_DR3, nil, login.GetService().GetName())
-					} else {
-						collect.UpdateStats(uint8(loginInfo.Channel), collect.Stats_Field_DR7, nil, login.GetService().GetName())
-					}
-				}
-			}
-
-		} else {
-			collect.UpdateStats(uint8(loginInfo.Channel), collect.Stats_Field_Register, nil, login.GetService().GetName())
-		}
 	})
 
 	if err != nil {
@@ -140,7 +120,7 @@ func (login *LoginModule) loginToDB(session *httpservice.HttpSession, loginInfo 
 
 func (login *LoginModule) WriteResponseError(session *httpservice.HttpSession, eCode msg.ErrCode) {
 	var resp HttpRespone
-	resp.ECode = int(eCode)
+	resp.ECode = int32(eCode)
 
 	session.WriteJsonDone(http.StatusOK, &resp)
 }
@@ -150,9 +130,8 @@ func (login *LoginModule) Login(session *httpservice.HttpSession) {
 	var loginInfo rpc.LoginInfo
 	body, _ := url.QueryUnescape(string(session.GetBody()))
 	err := json.Unmarshal([]byte(body), &loginInfo)
-	if err != nil || (loginInfo.Channel == rpc.Channel_PC && (loginInfo.UserName == "" || loginInfo.Password == "")) ||
-		(loginInfo.Channel == rpc.Channel_Steam && loginInfo.Ticket == "") {
-		login.WriteResponseError(session, msg.ErrCode_ParamInvalid)
+	if err != nil || loginInfo.UserName == "" || loginInfo.Password == "" {
+		login.WriteResponseError(session, msg.ErrCode_LoginParamError)
 		log.Warning("The body content of the HTTP request is incorrect:%s!", string(session.GetBody()))
 		return
 	}
@@ -166,7 +145,7 @@ type SaveAreaResp struct {
 }
 
 type SaveArea struct {
-	UserId uint64
+	UserId string
 	Token  string
 	AreaId int
 }
@@ -183,7 +162,7 @@ func (login *LoginModule) SaveArea(session *httpservice.HttpSession) {
 		return
 	}
 
-	userId, err := global.DecryptToken(saveArea.Token)
+	userId, err := util.DecryptToken(saveArea.Token)
 	if err != nil || userId != saveArea.UserId {
 		saveAreaResp.ECode = msg.ErrCode_TokenError
 		session.WriteJsonDone(http.StatusOK, &saveAreaResp)
@@ -195,7 +174,7 @@ func (login *LoginModule) SaveArea(session *httpservice.HttpSession) {
 	req.CollectName = collect.AccountCollectName
 	req.Type = db.OptType_Update
 	req.Condition, _ = bson.Marshal(bson.D{{"_id", userId}})
-	req.Key = 0
+	req.Key = userId
 
 	//存住进最后一次登陆的区服Id
 	data, _ := bson.Marshal(bson.M{"$set": bson.M{"LastArea": saveArea.AreaId}})
@@ -205,9 +184,4 @@ func (login *LoginModule) SaveArea(session *httpservice.HttpSession) {
 		saveAreaResp.ECode = msg.ErrCode_InterNalError
 	}
 	session.WriteJsonDone(http.StatusOK, &saveAreaResp)
-}
-
-func (login *LoginModule) GenToken(userId uint64) {
-	origToken := fmt.Sprintf("%d_%d", userId, time.Now().Unix())
-	util.AesEncrypt(origToken, global.TokenKey)
 }

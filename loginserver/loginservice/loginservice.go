@@ -1,15 +1,17 @@
 package loginservice
 
 import (
-	"dice-server-common/proto/rpc"
+	"common/collect"
+	"common/db"
 	"encoding/json"
 	"time"
 
-	"github.com/duanhf2012/origin/log"
-	"github.com/duanhf2012/origin/node"
-	"github.com/duanhf2012/origin/service"
-	"github.com/duanhf2012/origin/sysservice/httpservice"
-	"github.com/duanhf2012/origin/util/timer"
+	"github.com/duanhf2012/origin/v2/log"
+	"github.com/duanhf2012/origin/v2/node"
+	"github.com/duanhf2012/origin/v2/service"
+	"github.com/duanhf2012/origin/v2/sysservice/httpservice"
+	"github.com/duanhf2012/origin/v2/util/timer"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 func init() {
@@ -26,7 +28,7 @@ type AreaGate struct {
 type LoginService struct {
 	service.Service
 	loginModule *LoginModule
-	mapTcpGate  map[int]map[int]*TcpGateInfo //map[AreaId]map[nodeId]*TcpGateInfo
+	mapTcpGate  map[int]map[string]*TcpGateInfo //map[AreaId]map[nodeId]*TcpGateInfo
 
 	//mapTcpGateSlice map[int][]GateInfoResp //map[AreaId][]GateInfoResp
 
@@ -45,7 +47,7 @@ type TcpGateInfo struct {
 }
 
 func (gate *LoginService) OnInit() error {
-	gate.mapTcpGate = make(map[int]map[int]*TcpGateInfo, 100)
+	gate.mapTcpGate = make(map[int]map[string]*TcpGateInfo, 100)
 
 	areaList := gate.GetServiceCfg().([]interface{})
 	for _, al := range areaList {
@@ -55,10 +57,10 @@ func (gate *LoginService) OnInit() error {
 		gateList := mapArea["GateList"].([]interface{})
 		for _, g := range gateList {
 			gateInfo := g.(map[string]interface{})
-			nodeId := int(gateInfo["NodeId"].(float64))
+			nodeId := gateInfo["NodeId"].(string)
 			addr := gateInfo["Addr"].(string)
 			if gate.mapTcpGate[areaId] == nil {
-				gate.mapTcpGate[areaId] = make(map[int]*TcpGateInfo, 5)
+				gate.mapTcpGate[areaId] = make(map[string]*TcpGateInfo, 5)
 			}
 			gate.mapTcpGate[areaId][nodeId] = &TcpGateInfo{Weight: -1, Url: addr, AreaId: areaId, AreaName: areaName}
 		}
@@ -91,8 +93,19 @@ func (gate *LoginService) OnInit() error {
 	return nil
 }
 
+func (gate *LoginService) OnStart() {
+	var req db.DBControllerReq
+	req.CollectName = collect.AccountCollectName
+	req.Type = db.OptType_Find
+	req.MaxRow = 1
+	req.Condition, _ = bson.Marshal(bson.D{{"Account", "aa"}})
+	req.Key = "aa"
+	ret := db.DBControllerRet{}
+	gate.GetService().GetRpcHandler().Call("DBService.RPC_DBRequest", &req, &ret)
+}
+
 // GateService->LoginService同步负载
-func (gate *LoginService) RPC_SetTcpGateBalance(balance *rpc.NodeBalance) error {
+/*func (gate *LoginService) RPC_SetTcpGateBalance(balance *rpc.NodeBalance) error {
 	for _, mapNode := range gate.mapTcpGate {
 		v, ok := mapNode[int(balance.NodeId)]
 		if !ok {
@@ -106,9 +119,9 @@ func (gate *LoginService) RPC_SetTcpGateBalance(balance *rpc.NodeBalance) error 
 	}
 
 	return nil
-}
+}*/
 
-//超过10秒，则判断该网关已经无效
+// 超过10秒，则判断该网关已经无效
 const HealthyTimeOut = 10 * time.Second //10秒
 const WillMaxArea = 100
 

@@ -26,6 +26,7 @@ func (slf *TestService) OnInit() error {
 }
 
 func (slf *TestService) OnStart() {
+	return
 	var req db.DBControllerReq
 	sort1 := &db.Sort{}
 	sort1.SortField = "_id"
@@ -51,11 +52,11 @@ func (slf *TestService) OnStart() {
 				log.Error(err.Error())
 				return
 			}
-			userId = (account.UserID & 0xffffffff)
+			//userId = (account.UserId & 0xffffffff)
 			if userId > math.MaxInt32 {
 				return
 			}
-			userId = account.UserID + 1
+			//userId = account.UserId + 1
 		} else {
 			platSrvId |= 1
 			platSrvId |= (int64(1) << 12)
